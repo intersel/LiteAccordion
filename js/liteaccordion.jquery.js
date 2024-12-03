@@ -8,6 +8,29 @@
 *   Version:    2.2.0
 *   Copyright:  (c) 2010-2013 Nicola Hibbert
 *   Licence:    MIT
+*   Usage:
+*   $('#slideshow').liteAccordion({
+        onTriggerSlide: function () {
+            this.find('figcaption').fadeOut();
+        },
+        onSlideAnimComplete: function () {
+            this.find('figcaption').fadeIn();
+        },
+        autoPlay: true,
+        pauseOnHover: true,
+        theme: 'team',
+        rounded: false,
+        enumerateSlides: true,
+        containerWidth: 900,
+        containerHeight: 350,
+        headerWidth: 38,
+        activateOn: 'mouseover',
+        responsive: {
+            maxWidth:0,//width size under that we consider we have to apply these parameters
+            //any liteaccordion data
+        }
+    });
+*   $('#slideshow').data('liteAccordion').update({ "containerHeight": 530, headerWidth: 0 }) 
 *
 **************************************************/
 
@@ -20,7 +43,8 @@
             containerHeight : 320,                  // fixed (px)
             headerWidth : 48,                       // fixed (px)
 
-            activateOn : 'click',                   // click or mouseover
+            activateOn: 'click',                   // click or mouseover
+            activateResize: 1,                      // activate automatic resize
             firstSlide : 1,                         // displays slide (n) on page load
             slideSpeed : 800,                       // slide animation speed
             onTriggerSlide : function(e) {},        // callback on slide activate
@@ -116,6 +140,16 @@
                         methods : methods,
                         core : core
                     };
+                },// Patch https://github.com/nikki/LiteAccordion/pull/78
+                update: function (data) {
+                    settings = $.extend({}, settings, data),
+                        slides = elem.children('ol').children('li'),
+                        header = slides.children(':first-child'),
+                        slideLen = slides.length,
+                        slideWidth = settings.containerWidth - slideLen * settings.headerWidth;
+
+
+                    core.setStyles();
                 }
             },
 
@@ -140,6 +174,7 @@
 
                     // set slide positions
                     core.setSlidePositions();
+
                 },
 
                 // set initial positions for each slide
@@ -171,7 +206,7 @@
                                 .css({ left : left, paddingLeft : settings.headerWidth });
 
                         // add number to bottom of tab
-                        settings.enumerateSlides && $this.append('<b>' + (index + 1) + '</b>');
+                        settings.enumerateSlides && ($this.find("b.index").length == 0) && $this.append('<b class="index">' + (index + 1) + '</b>');
 
                     });
                 },
@@ -183,6 +218,32 @@
                         header.on('click.liteAccordion', core.triggerSlide);
                     } else if (settings.activateOn === 'mouseover') {
                         header.on('click.liteAccordion mouseover.liteAccordion', core.triggerSlide);
+                    }
+
+                    if (settings.activateResize === 1)
+                    {
+                        let originalSettings = $.extend({}, settings);
+                        let defaultContainerWidth = settings.containerWidth;
+                        $(window).on('resize', function () {
+                            // console.log(`Nouvelle largeur de la fenêtre : ${window.innerWidth}px`);
+                            let newWidth = Math.min(defaultContainerWidth, window.innerWidth);
+                            methods.update({ "containerWidth": newWidth });
+                            if (    !settings.responsiveIsActive
+                                &&  originalSettings.responsive
+                                &&  (newWidth <= originalSettings.responsive.maxWidth))
+                            {
+                                methods.update($.extend({ "responsiveIsActive": true }, originalSettings.responsive));
+                            }
+                            else if (   settings.responsiveIsActive
+                                    &&  (newWidth > originalSettings.responsive.maxWidth))
+                            {
+                                methods.update($.extend({ "responsiveIsActive": false }, originalSettings));
+                            }
+                        });
+                        setTimeout(function () {
+                            $(window).trigger('resize');
+                        }, 100);
+
                     }
 
                     // bind hashchange event
@@ -249,6 +310,9 @@
                         }
                     }
 
+                    // Patch https://github.com/nikki/LiteAccordion/pull/71
+                    if (core.currentSlide == tab.index)
+                        return;
                     // update core.currentSlide
                     core.currentSlide = tab.index;
 
@@ -388,9 +452,13 @@
 
     };
 
-    $.fn.liteAccordion = function(method) {
+    // Patch https://github.com/nikki/LiteAccordion/pull/78
+    // $.fn.liteAccordion = function(method) {
+    $.fn.liteAccordion = function () {
+        var method = arguments[0];
+    // End Patch https://github.com/nikki/LiteAccordion/pull/78
         var elem = this,
-            instance = elem.data('liteAccordion');
+        instance = elem.data('liteAccordion');
 
         // if creating a new instance
         if (typeof method === 'object' || !method) {
@@ -407,11 +475,18 @@
 
         // otherwise, call method on current instance
         } else if (typeof method === 'string' && instance[method]) {
+            // Patch https://github.com/nikki/LiteAccordion/pull/78
+            arguments = Array.prototype.slice.call(arguments, 1);
+            // End Patch https://github.com/nikki/LiteAccordion/pull/78
+            
             // debug method isn't chainable b/c we need the debug object to be returned
             if (method === 'debug') {
                 return instance[method].call(elem);
             } else { // the rest of the methods are chainable though
-                instance[method].call(elem);
+                // Patch https://github.com/nikki/LiteAccordion/pull/78
+                //instance[method].call(elem);
+                instance[method].apply(elem, arguments);
+                // End Patch https://github.com/nikki/LiteAccordion/pull/78
                 return elem;
             }
         }
